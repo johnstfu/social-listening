@@ -1,84 +1,132 @@
 /**
- * Social Listening Dashboard
- * Clean, modern UX/UI inspired by best practices
- *
- * Structure:
- * 1. Hero KPIs (4 essential metrics)
- * 2. Main Charts (Sentiment + Evolution)
- * 3. Alerts (urgent items needing action)
- * 4. Strengths (positive highlights)
- * 5. Recommendations (actionable items)
+ * Social Listening Dashboard - UX/UI Optimized Version
+ * Based on user's recommendations
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  Star, TrendingUp, TrendingDown, AlertTriangle,
-  CheckCircle, RefreshCw, MessageCircle, ThumbsUp,
-  ExternalLink, Clock, ArrowRight
+  Star, TrendingUp, TrendingDown, MessageCircle, CheckCircle,
+  RefreshCw, AlertTriangle, ThumbsUp, ExternalLink, Clock
 } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as Tooltip2, ResponsiveContainer as ResponsiveContainer2 } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 // Demo data - would come from API in production
 const DEMO_DATA = {
   restaurant: {
     name: "Le Petit Bistrot",
-    address: "Paris, France"
+    address: "Paris, France",
+    platform: "Google My Business"
   },
   metrics: {
-    avgRating: 4.2,
-    totalReviews: 156,
-    sentimentScore: 72,
-    responseRate: 85
+    avgRating: { value: 4.2, max: 5, trend: 0.3, trendLabel: "vs mois dernier" },
+    totalReviews: { value: 156, trend: 12, trendLabel: "ce mois" },
+    sentimentScore: { value: 72, trend: 5, trendLabel: "vs mois dernier" },
+    responseRate: { value: 85, trend: 3, trendLabel: "vs mois dernier" }
   },
   sentiment: [
-    { name: 'Positifs', value: 72, color: '#22c55e' },
-    { name: 'Neutres', value: 15, color: '#6b7280' },
-    { name: 'Négatifs', value: 13, color: '#ef4444' }
+    { label: 'Positifs', emoji: '😊', value: 72, count: 112, color: '#10B981' },
+    { label: 'Neutres', emoji: '😐', value: 20, count: 31, color: '#6B7280' },
+    { label: 'Négatifs', emoji: '😞', value: 8, count: 13, color: '#EF4444' }
   ],
   timeline: [
-    { date: 'Jan', score: 65 },
-    { date: 'Fév', score: 68 },
-    { date: 'Mar', score: 70 },
-    { date: 'Avr', score: 72 },
-    { date: 'Mai', score: 75 },
-    { date: 'Juin', score: 72 }
+    { month: 'Jan', score: 65 },
+    { month: 'Fév', score: 68 },
+    { month: 'Mar', score: 70 },
+    { month: 'Avr', score: 71 },
+    { month: 'Mai', score: 72 },
+    { month: 'Juin', score: 72 }
   ],
   alerts: [
-    { id: 1, type: 'negative', platform: 'Google', rating: 2, text: "Temps d'attente trop long...", urgent: true },
-    { id: 2, type: 'negative', platform: 'TripAdvisor', rating: 3, text: " Qualité food moyens...", urgent: false },
-    { id: 3, type: 'warning', platform: 'Facebook', text: "8 avis sans réponse depuis 30j", urgent: false }
+    {
+      id: 1,
+      type: 'urgent',
+      platform: 'Google My Business',
+      title: '5 avis négatifs mentionnent "temps d\'attente"',
+      context: '📊 Tendance : 5 mentions en 7 jours (vs 1/semaine habituellement)\n📉 Impact estimé : -0.2 pts note si non traité',
+      action1: 'Voir les 5 avis',
+      action2: 'Plan d\'action IA'
+    },
+    {
+      id: 2,
+      type: 'warning',
+      platform: 'Google My Business',
+      title: '3 avis sans réponse depuis 7 jours',
+      context: '📊 Impact : Votre taux de réponse passe de 85% à 82%',
+      action1: 'Répondre maintenant'
+    }
   ],
   strengths: [
-    { id: 1, text: "Accueil chaleureux", mentions: 45, platform: "Multi-plateformes" },
-    { id: 2, text: "Cuisine authentique", mentions: 38, platform: "Google" },
-    { id: 3, text: "Cadre romantique", mentions: 32, platform: "TripAdvisor" }
+    {
+      id: 1,
+      emoji: '😊',
+      title: 'Accueil chaleureux',
+      mentions: 45,
+      example: '"Service très attentionné" - Marie L.'
+    },
+    {
+      id: 2,
+      emoji: '🍽️',
+      title: 'Cuisine authentique',
+      mentions: 38,
+      example: '"Bœuf bourguignon excellent" - Jean D.'
+    },
+    {
+      id: 3,
+      emoji: '❤️',
+      title: 'Cadre romantique',
+      mentions: 32,
+      example: '"Parfait pour un tête-à-tête" - Sophie M.'
+    }
   ],
   recommendations: [
-    { id: 1, priority: 'high', title: "Répondre aux avis négatifs", impact: "+15% visibilité", effort: "10min" },
-    { id: 2, priority: 'medium', title: "Améliorer les temps d'attente", impact: "+20% satisfaction", effort: "1 sem" },
-    { id: 3, priority: 'low', title: "Demander des avis clients", impact: "+10% confiance", effort: "En cours" }
+    {
+      id: 1,
+      priority: 'high',
+      priorityLabel: 'PRIORITAIRE',
+      time: '15min',
+      title: 'Répondre aux 5 avis négatifs récents',
+      why: 'Montrer votre réactivité + améliorer perception',
+      impact: '+15% visibilité GMB estimée',
+      actions: ['Voir templates de réponse', 'Accéder aux avis'],
+      aiTips: ['Répondre sous 24h max', 'Montrer empathie + actions correctives', 'Personnaliser chaque réponse']
+    },
+    {
+      id: 2,
+      priority: 'medium',
+      priorityLabel: 'MOYEN TERME',
+      time: '1 semaine',
+      title: 'Résoudre problème "temps d\'attente"',
+      why: 'Sujet récurrent (8 mentions en 14j)',
+      impact: '+20% satisfaction client estimée',
+      actions: ['Plan d\'action détaillé']
+    },
+    {
+      id: 3,
+      priority: 'low',
+      priorityLabel: 'EN COURS',
+      time: '',
+      status: '✓ 2/4 actions complétées',
+      progress: 50,
+      title: 'Augmenter volume d\'avis positifs',
+      actions: ['Voir progression']
+    }
   ]
 }
 
-const CustomTooltip = ({ active, payload }) => {
+const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-slate-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
-        <p className="font-semibold">{payload[0].payload.name}</p>
-        <p className="text-slate-300">{payload[0].value}%</p>
-      </div>
-    )
-  }
-  return null
-}
-
-const TimelineTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-slate-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
-        <p className="font-semibold">{label}</p>
-        <p className="text-emerald-400">Score: {payload[0].value}</p>
+      <div style={{
+        background: 'white',
+        border: '1px solid #E5E7EB',
+        borderRadius: '6px',
+        padding: '8px 12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+      }}>
+        <p style={{ fontWeight: 600, margin: 0 }}>{payload[0].payload.month}</p>
+        <p style={{ color: '#10B981', fontWeight: 600, margin: '4px 0 0' }}>
+          {payload[0].value}% positif
+        </p>
       </div>
     )
   }
@@ -86,263 +134,522 @@ const TimelineTooltip = ({ active, payload, label }) => {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState(new Date())
 
   const handleRefresh = () => {
     setLoading(true)
-    setTimeout(() => setLoading(false), 1000)
+    setTimeout(() => {
+      setLoading(false)
+      setLastUpdate(new Date())
+    }, 1000)
   }
 
   const data = DEMO_DATA
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div style={{ minHeight: '100vh', background: '#F9FAFB' }}>
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center">
-                <MessageCircle className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="font-bold text-slate-900">{data.restaurant.name}</h1>
-                <p className="text-sm text-slate-500">{data.restaurant.address}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleRefresh}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm font-medium"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Actualiser
-              </button>
-            </div>
-          </div>
+      <header style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '24px',
+        background: 'white',
+        borderBottom: '1px solid #E5E7EB',
+        marginBottom: '24px'
+      }}>
+        <div>
+          <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: 600, color: '#111827' }}>
+            {data.restaurant.name}
+          </h1>
+          <p style={{ margin: 0, color: '#6B7280', fontSize: '14px' }}>
+            📍 {data.restaurant.address} • {data.restaurant.platform}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <span style={{ fontSize: '13px', color: '#6B7280' }}>
+            Mis à jour: {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <button
+            onClick={handleRefresh}
+            style={{
+              background: '#3B82F6',
+              color: 'white',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Actualiser
+          </button>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        {/* Hero KPIs */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-500 text-sm">Note moyenne</span>
-              <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+      {/* Navigation */}
+      <nav style={{
+        display: 'flex',
+        gap: '8px',
+        padding: '16px 24px',
+        background: 'white',
+        borderBottom: '1px solid #E5E7EB'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 16px',
+          borderRadius: '6px',
+          background: '#EFF6FF',
+          color: '#3B82F6',
+          fontSize: '14px',
+          fontWeight: 500
+        }}>
+          <span>📊</span>
+          <span>Dashboard</span>
+        </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 16px',
+          borderRadius: '6px',
+          color: '#6B7280',
+          fontSize: '14px',
+          fontWeight: 500,
+          cursor: 'pointer'
+        }}>
+          <span>⚙️</span>
+          <span>Configuration API</span>
+        </div>
+      </nav>
+
+      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
+
+        {/* KPIs Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '16px',
+          marginBottom: '24px'
+        }}>
+          {/* Note Moyenne */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <span style={{ color: '#6B7280', fontSize: '14px' }}>Note moyenne</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
+              <span style={{ fontSize: '32px', fontWeight: 600, color: '#111827' }}>
+                {data.metrics.avgRating.value}
+              </span>
+              <span style={{ color: '#6B7280' }}>/{data.metrics.avgRating.max}</span>
+              <span style={{
+                fontSize: '14px',
+                color: data.metrics.avgRating.trend >= 0 ? '#10B981' : '#EF4444',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px'
+              }}>
+                {data.metrics.avgRating.trend >= 0 ? '↗' : '↘'} {Math.abs(data.metrics.avgRating.trend)}
+              </span>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-slate-900">{data.metrics.avgRating}</span>
-              <span className="text-slate-400">/5</span>
-            </div>
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>
+              {data.metrics.avgRating.trendLabel}
+            </span>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-500 text-sm">Total avis</span>
-              <MessageCircle className="w-4 h-4 text-blue-500" />
+          {/* Total Avis */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <span style={{ color: '#6B7280', fontSize: '14px' }}>Total avis</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
+              <span style={{ fontSize: '32px', fontWeight: 600, color: '#111827' }}>
+                {data.metrics.totalReviews.value}
+              </span>
+              <span style={{
+                fontSize: '14px',
+                color: '#10B981',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px'
+              }}>
+                ↗ +{data.metrics.totalReviews.trend}
+              </span>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-slate-900">{data.metrics.totalReviews}</span>
-            </div>
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>
+              {data.metrics.totalReviews.trendLabel}
+            </span>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-500 text-sm">Score sentiment</span>
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
+          {/* Score Sentiment */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <span style={{ color: '#6B7280', fontSize: '14px' }}>Score sentiment</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
+              <span style={{ fontSize: '32px', fontWeight: 600, color: '#10B981' }}>
+                {data.metrics.sentimentScore.value}
+              </span>
+              <span style={{ color: '#6B7280' }}>%</span>
+              <span style={{
+                fontSize: '14px',
+                color: data.metrics.sentimentScore.trend >= 0 ? '#10B981' : '#EF4444',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px'
+              }}>
+                {data.metrics.sentimentScore.trend >= 0 ? '↗' : '↘'} {Math.abs(data.metrics.sentimentScore.trend)}%
+              </span>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-emerald-600">{data.metrics.sentimentScore}</span>
-              <span className="text-slate-400">%</span>
-            </div>
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>
+              {data.metrics.sentimentScore.trendLabel}
+            </span>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-500 text-sm">Taux de réponse</span>
-              <CheckCircle className="w-4 h-4 text-purple-500" />
+          {/* Taux de réponse */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <span style={{ color: '#6B7280', fontSize: '14px' }}>Taux de réponse</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
+              <span style={{ fontSize: '32px', fontWeight: 600, color: '#111827' }}>
+                {data.metrics.responseRate.value}
+              </span>
+              <span style={{ color: '#6B7280' }}>%</span>
+              <span style={{
+                fontSize: '14px',
+                color: '#10B981',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px'
+              }}>
+                ↗ +{data.metrics.responseRate.trend}%
+              </span>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-slate-900">{data.metrics.responseRate}</span>
-              <span className="text-slate-400">%</span>
-            </div>
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>
+              {data.metrics.responseRate.trendLabel}
+            </span>
           </div>
-        </section>
+        </div>
 
-        {/* Main Charts Row */}
-        <section className="grid md:grid-cols-2 gap-6">
-          {/* Sentiment Donut */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-900 mb-4">Répartition des sentiments</h3>
-            <div className="h-64">
+        {/* 2 Columns: Evolution + Sentiment */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '24px',
+          marginBottom: '24px'
+        }}>
+          {/* Evolution Chart */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600, color: '#111827' }}>
+              Évolution du score sentiment
+            </h3>
+            <div style={{ height: '200px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data.sentiment}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {data.sentiment.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
+                <LineChart data={data.timeline}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#6B7280' }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(value) => <span className="text-slate-600 text-sm">{value}</span>}
+                  <Line
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#10B981"
+                    strokeWidth={2}
+                    dot={{ fill: '#10B981', r: 4 }}
                   />
-                </PieChart>
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Timeline */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-900 mb-4">Évolution du score</h3>
-            <div className="h-64">
-              <ResponsiveContainer2 width="100%" height="100%">
-                <LineChart data={data.timeline}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12, fill: '#64748b' }}
-                    axisLine={{ stroke: '#e2e8f0' }}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fontSize: 12, fill: '#64748b' }}
-                    axisLine={{ stroke: '#e2e8f0' }}
-                  />
-                  <Tooltip2 content={<TimelineTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#22c55e"
-                    strokeWidth={3}
-                    dot={{ fill: '#22c55e', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6, fill: '#16a34a' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer2>
-            </div>
-          </div>
-        </section>
-
-        {/* Alerts & Strengths Row */}
-        <section className="grid md:grid-cols-2 gap-6">
-          {/* Alerts */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h3 className="font-semibold text-slate-900">Alertes prioritaires</h3>
-            </div>
-            <div className="space-y-3">
-              {data.alerts.map(alert => (
-                <div
-                  key={alert.id}
-                  className={`p-4 rounded-xl border ${
-                    alert.urgent
-                      ? 'bg-red-50 border-red-200'
-                      : 'bg-amber-50 border-amber-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          alert.urgent ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {alert.platform}
-                        </span>
-                        {alert.rating && (
-                          <div className="flex items-center">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`w-3 h-3 ${i < alert.rating ? 'text-amber-500 fill-amber-500' : 'text-slate-300'}`}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-sm text-slate-700">{alert.text}</p>
-                    </div>
-                    {alert.urgent && (
-                      <span className="px-2 py-1 bg-red-500 text-white text-xs font-medium rounded-full">
-                        Urgent
-                      </span>
-                    )}
+          {/* Sentiment Distribution */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600, color: '#111827' }}>
+              Répartition des sentiments ({data.metrics.totalReviews.value} avis)
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {data.sentiment.map((item, index) => (
+                <div key={index} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 80px', gap: '12px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '14px', color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {item.emoji} {item.label}
+                  </span>
+                  <div style={{ background: '#F3F4F6', height: '24px', borderRadius: '12px', overflow: 'hidden' }}>
+                    <div style={{
+                      background: item.color,
+                      height: '100%',
+                      width: `${item.value}%`,
+                      transition: 'width 0.3s ease'
+                    }} />
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Strengths */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center gap-2 mb-4">
-              <ThumbsUp className="w-5 h-5 text-emerald-500" />
-              <h3 className="font-semibold text-slate-900">Points forts</h3>
-            </div>
-            <div className="space-y-3">
-              {data.strengths.map(strength => (
-                <div
-                  key={strength.id}
-                  className="p-4 rounded-xl bg-emerald-50 border border-emerald-200"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-medium text-slate-900">{strength.text}</p>
-                    <span className="text-emerald-600 font-semibold">+{strength.mentions}</span>
-                  </div>
-                  <p className="text-xs text-slate-500">{strength.platform}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Recommendations */}
-        <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-4">
-            <CheckCircle className="w-5 h-5 text-purple-500" />
-            <h3 className="font-semibold text-slate-900">Recommandations</h3>
-          </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            {data.recommendations.map(rec => (
-              <div
-                key={rec.id}
-                className="p-4 rounded-xl border border-slate-200 hover:border-purple-200 hover:bg-purple-50/50 transition-colors"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    rec.priority === 'high' ? 'bg-red-100 text-red-700' :
-                    rec.priority === 'medium' ? 'bg-amber-100 text-amber-700' :
-                    'bg-slate-100 text-slate-700'
-                  }`}>
-                    {rec.priority === 'high' ? '🔴 Prioritaire' :
-                     rec.priority === 'medium' ? '🟡 Moyen' : '🟢 En cours'}
+                  <span style={{ fontWeight: 600, fontSize: '14px', color: item.color, textAlign: 'right' }}>
+                    {item.value}% ({item.count})
                   </span>
                 </div>
-                <h4 className="font-medium text-slate-900 mb-3">{rec.title}</h4>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Impact: <span className="text-emerald-600 font-medium">{rec.impact}</span></span>
-                  <span className="text-slate-400">{rec.effort}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Alerts Section */}
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🚨 Alertes GMB <span style={{ fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>(détectées par IA)</span>
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {data.alerts.map(alert => (
+              <div key={alert.id} style={{
+                background: alert.type === 'urgent' ? '#FEF2F2' : '#FFFBEB',
+                borderLeft: `4px solid ${alert.type === 'urgent' ? '#DC2626' : '#F59E0B'}`,
+                borderRadius: '8px',
+                padding: '16px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                  <span style={{
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: alert.type === 'urgent' ? '#DC2626' : '#F59E0B',
+                    color: 'white'
+                  }}>
+                    {alert.type === 'urgent' ? '🔴 URGENT' : '🟡 ATTENTION'}
+                  </span>
+                  <span style={{ fontSize: '14px', color: '#6B7280' }}>{alert.platform}</span>
+                </div>
+                <h4 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600, color: '#111827' }}>
+                  {alert.title}
+                </h4>
+                <div style={{
+                  background: 'white',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  color: '#6B7280',
+                  whiteSpace: 'pre-line',
+                  marginBottom: '12px'
+                }}>
+                  {alert.context}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button style={{
+                    background: '#3B82F6',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 16px',
+                    borderRadius: '6px',
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}>
+                    {alert.action1} →
+                  </button>
+                  {alert.action2 && (
+                    <button style={{
+                      background: 'white',
+                      color: '#3B82F6',
+                      border: '1px solid #3B82F6',
+                      padding: '10px 16px',
+                      borderRadius: '6px',
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}>
+                      {alert.action2}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+
+        {/* 2 Columns: Strengths + Recommendations */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '24px'
+        }}>
+          {/* Points Forts */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              💪 Vos points forts GMB
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {data.strengths.map(strength => (
+                <div key={strength.id} style={{
+                  background: '#F9FAFB',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '8px',
+                  padding: '16px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '24px' }}>{strength.emoji}</span>
+                    <h4 style={{ flex: 1, margin: 0, fontSize: '16px', fontWeight: 500, color: '#111827' }}>
+                      {strength.title}
+                    </h4>
+                    <span style={{
+                      background: '#D1FAE5',
+                      color: '#059669',
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontWeight: 600,
+                      fontSize: '14px'
+                    }}>
+                      +{strength.mentions}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#6B7280', margin: '4px 0' }}>
+                    Mentionné dans {strength.mentions} avis positifs
+                  </p>
+                  <p style={{
+                    fontSize: '13px',
+                    fontStyle: 'italic',
+                    color: '#4B5563',
+                    marginTop: '8px',
+                    paddingLeft: '12px',
+                    borderLeft: '3px solid #D1FAE5'
+                  }}>
+                    {strength.example}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recommandations */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E5E7EB',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🤖 Recommandations IA <span style={{ fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>(générées automatiquement)</span>
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {data.recommendations.map(rec => (
+                <div key={rec.id} style={{
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '8px',
+                  padding: '16px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      background: rec.priority === 'high' ? '#FEE2E2' : rec.priority === 'medium' ? '#FEF3C7' : '#D1FAE5',
+                      color: rec.priority === 'high' ? '#DC2626' : rec.priority === 'medium' ? '#D97706' : '#059669'
+                    }}>
+                      {rec.priority === 'high' ? '🔴' : rec.priority === 'medium' ? '🟡' : '🟢'} {rec.priorityLabel}
+                    </span>
+                    {rec.time && (
+                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        ⏱️ {rec.time}
+                      </span>
+                    )}
+                    {rec.status && (
+                      <span style={{ fontSize: '12px', color: '#059669' }}>
+                        {rec.status}
+                      </span>
+                    )}
+                  </div>
+                  <h4 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 500, color: '#111827' }}>
+                    {rec.title}
+                  </h4>
+                  <div style={{
+                    background: '#F9FAFB',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    marginBottom: '12px'
+                  }}>
+                    <p style={{ margin: '4px 0' }}><strong>Pourquoi :</strong> {rec.why}</p>
+                    <p style={{ margin: '4px 0' }}><strong>Impact :</strong> {rec.impact}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {rec.actions.map((action, i) => (
+                      <button key={i} style={{
+                        background: i === 0 ? '#3B82F6' : 'white',
+                        color: i === 0 ? 'white' : '#3B82F6',
+                        border: i === 0 ? 'none' : '1px solid #3B82F6',
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        fontWeight: 500,
+                        fontSize: '13px',
+                        cursor: 'pointer'
+                      }}>
+                        {action}
+                      </button>
+                    ))}
+                  </div>
+                  {rec.aiTips && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: '#EFF6FF',
+                      borderLeft: '3px solid #3B82F6',
+                      borderRadius: '6px',
+                      fontSize: '13px'
+                    }}>
+                      <p style={{ margin: '0 0 8px', fontWeight: 500 }}>💡 <strong>L'IA recommande :</strong></p>
+                      <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                        {rec.aiTips.map((tip, i) => (
+                          <li key={i} style={{ margin: '4px 0' }}>{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {rec.progress && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={{ background: '#F3F4F6', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ background: '#10B981', height: '100%', width: `${rec.progress}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* Footer */}
-        <footer className="text-center py-4">
-          <p className="text-sm text-slate-400">
+        <footer style={{ textAlign: 'center', padding: '24px 0' }}>
+          <p style={{ fontSize: '13px', color: '#9CA3AF' }}>
             Dernière mise à jour: {new Date().toLocaleDateString('fr-FR', {
               day: 'numeric',
               month: 'long',
