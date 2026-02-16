@@ -9,6 +9,7 @@ import {
   RefreshCw, AlertTriangle, ThumbsUp, ExternalLink, Clock
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import RecommendationCard from '../components/RecommendationCard'
 
 // Demo data - would come from API in production
 const DEMO_DATA = {
@@ -81,37 +82,47 @@ const DEMO_DATA = {
   recommendations: [
     {
       id: 1,
-      priority: 'high',
-      priorityLabel: 'PRIORITAIRE',
-      time: '15min',
-      title: 'Répondre aux 5 avis négatifs récents',
-      why: 'Montrer votre réactivité améliore la perception de 73% des clients. Les réponses aux avis négatifs peuvent inverser la perception.',
-      impact: '+15% visibilité GMB estimée | +8% conversion visite',
-      actions: ['Voir templates de réponse', 'Accéder aux avis'],
-      aiTips: ['Répondre sous 24h max', 'Montrer empathie + actions correctives', 'Personnaliser chaque réponse']
+      title: 'Améliorer la gestion des temps d\'attente',
+      priority: 'urgent',
+      domain: 'Service',
+      date: '16 févr.',
+      description: 'Plusieurs clients mentionnent des temps d\'attente excessifs, particulièrement le weekend. Cela impacte négativement l\'expérience client.',
+      source: 'Analyse des avis négatifs sur le service',
+      actions: [
+        { id: 'a1', text: 'Recruter un serveur supplémentaire pour les services du weekend', completed: false },
+        { id: 'a2', text: 'Mettre en place un système de notification pour les clients en attente', completed: false },
+        { id: 'a3', text: 'Former l\'équipe à la gestion des pics d\'affluence', completed: false },
+        { id: 'a4', text: 'Proposer un apéritif offert en cas d\'attente supérieure à 30 minutes', completed: false }
+      ]
     },
     {
       id: 2,
-      priority: 'medium',
-      priorityLabel: 'MOYEN TERME',
-      time: '1 semaine',
-      title: 'Résoudre problème "temps d\'attente"',
-      why: 'Sujet récurrent (8 mentions en 14j). Le temps d\'attente est le 2e facteur de mécontentement après la qualité food.',
-      impact: '+20% satisfaction client estimée | +12% avis positifs',
-      actions: ['Plan d\'action détaillé', 'Formation équipe']
+      title: 'Répondre aux avis négatifs récents',
+      priority: 'high',
+      domain: 'Réputation',
+      date: '15 févr.',
+      description: '5 avis négatifs n\'ont pas reçu de réponse. Répondre montre votre réactivité et peut inverser la perception négative.',
+      source: 'Analyse GMB - Avis non répondus',
+      actions: [
+        { id: 'b1', text: 'Répondre à l\'avis de Marie L. (2 étoiles - temps d\'attente)', completed: true },
+        { id: 'b2', text: 'Répondre à l\'avis de Jean D. (2 étoiles - qualité)', completed: false },
+        { id: 'b3', text: 'Répondre à l\'avis de Sophie M. (3 étoiles - prix)', completed: false }
+      ]
     },
     {
       id: 3,
-      priority: 'low',
-      priorityLabel: 'EN COURS',
-      time: '',
-      status: '✓ 2/4 actions complétées',
-      progress: 50,
-      title: 'Augmenter volume d\'avis positifs',
-      why: 'Un volume élevé d\'avis positifs améliore le classement local et la confiance des nouveaux clients.',
-      impact: '+25% confiance nouveaux clients | +10% taux de conversion',
-      actions: ['Voir progression', 'Demander avis en sortie'],
-      aiTips: ['Former le staff à solliciter les clients satisfaits', 'Créer un QR code pour avis rapide']
+      title: 'Augmenter le volume d\'avis positifs',
+      priority: 'medium',
+      domain: 'Marketing',
+      date: '14 févr.',
+      description: 'Un volume élevé d\'avis positifs améliore le classement local Google et la confiance des nouveaux clients.',
+      source: 'Recommandation IA - Optimisation GMB',
+      actions: [
+        { id: 'c1', text: 'Former le staff à solliciter les clients satisfaits', completed: true },
+        { id: 'c2', text: 'Créer un QR code pour avis rapide', completed: true },
+        { id: 'c3', text: 'Mettre en place un email de suivi post-visite', completed: false },
+        { id: 'c4', text: 'Proposer une réduction pour avis laissé', completed: false }
+      ]
     }
   ]
 }
@@ -559,92 +570,12 @@ export default function Dashboard() {
             borderRadius: '8px',
             padding: '16px'
           }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              🤖 Recommandations IA <span style={{ fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>(générées automatiquement)</span>
+            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827' }}>
+              🤖 Recommandations IA
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {data.recommendations.map(rec => (
-                <div key={rec.id} style={{
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '8px',
-                  padding: '16px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{
-                      padding: '4px 12px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      background: rec.priority === 'high' ? '#FEE2E2' : rec.priority === 'medium' ? '#FEF3C7' : '#D1FAE5',
-                      color: rec.priority === 'high' ? '#DC2626' : rec.priority === 'medium' ? '#D97706' : '#059669'
-                    }}>
-                      {rec.priority === 'high' ? '🔴' : rec.priority === 'medium' ? '🟡' : '🟢'} {rec.priorityLabel}
-                    </span>
-                    {rec.time && (
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        ⏱️ {rec.time}
-                      </span>
-                    )}
-                    {rec.status && (
-                      <span style={{ fontSize: '12px', color: '#059669' }}>
-                        {rec.status}
-                      </span>
-                    )}
-                  </div>
-                  <h4 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 500, color: '#111827' }}>
-                    {rec.title}
-                  </h4>
-                  <div style={{
-                    background: '#F9FAFB',
-                    padding: '12px',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    marginBottom: '12px'
-                  }}>
-                    <p style={{ margin: '4px 0' }}><strong>Pourquoi :</strong> {rec.why}</p>
-                    <p style={{ margin: '4px 0' }}><strong>Impact :</strong> {rec.impact}</p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {rec.actions.map((action, i) => (
-                      <button key={i} style={{
-                        background: i === 0 ? '#3B82F6' : 'white',
-                        color: i === 0 ? 'white' : '#3B82F6',
-                        border: i === 0 ? 'none' : '1px solid #3B82F6',
-                        padding: '8px 14px',
-                        borderRadius: '6px',
-                        fontWeight: 500,
-                        fontSize: '13px',
-                        cursor: 'pointer'
-                      }}>
-                        {action}
-                      </button>
-                    ))}
-                  </div>
-                  {rec.aiTips && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '12px',
-                      background: '#EFF6FF',
-                      borderLeft: '3px solid #3B82F6',
-                      borderRadius: '6px',
-                      fontSize: '13px'
-                    }}>
-                      <p style={{ margin: '0 0 8px', fontWeight: 500 }}>💡 <strong>L'IA recommande :</strong></p>
-                      <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                        {rec.aiTips.map((tip, i) => (
-                          <li key={i} style={{ margin: '4px 0' }}>{tip}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {rec.progress && (
-                    <div style={{ marginTop: '12px' }}>
-                      <div style={{ background: '#F3F4F6', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ background: '#10B981', height: '100%', width: `${rec.progress}%` }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <RecommendationCard key={rec.id} recommendation={rec} />
               ))}
             </div>
           </div>
