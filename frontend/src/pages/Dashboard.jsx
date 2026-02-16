@@ -85,8 +85,8 @@ const DEMO_DATA = {
       priorityLabel: 'PRIORITAIRE',
       time: '15min',
       title: 'Répondre aux 5 avis négatifs récents',
-      why: 'Montrer votre réactivité + améliorer perception',
-      impact: '+15% visibilité GMB estimée',
+      why: 'Montrer votre réactivité améliore la perception de 73% des clients. Les réponses aux avis négatifs peuvent inverser la perception.',
+      impact: '+15% visibilité GMB estimée | +8% conversion visite',
       actions: ['Voir templates de réponse', 'Accéder aux avis'],
       aiTips: ['Répondre sous 24h max', 'Montrer empathie + actions correctives', 'Personnaliser chaque réponse']
     },
@@ -96,9 +96,9 @@ const DEMO_DATA = {
       priorityLabel: 'MOYEN TERME',
       time: '1 semaine',
       title: 'Résoudre problème "temps d\'attente"',
-      why: 'Sujet récurrent (8 mentions en 14j)',
-      impact: '+20% satisfaction client estimée',
-      actions: ['Plan d\'action détaillé']
+      why: 'Sujet récurrent (8 mentions en 14j). Le temps d\'attente est le 2e facteur de mécontentement après la qualité food.',
+      impact: '+20% satisfaction client estimée | +12% avis positifs',
+      actions: ['Plan d\'action détaillé', 'Formation équipe']
     },
     {
       id: 3,
@@ -108,7 +108,10 @@ const DEMO_DATA = {
       status: '✓ 2/4 actions complétées',
       progress: 50,
       title: 'Augmenter volume d\'avis positifs',
-      actions: ['Voir progression']
+      why: 'Un volume élevé d\'avis positifs améliore le classement local et la confiance des nouveaux clients.',
+      impact: '+25% confiance nouveaux clients | +10% taux de conversion',
+      actions: ['Voir progression', 'Demander avis en sortie'],
+      aiTips: ['Former le staff à solliciter les clients satisfaits', 'Créer un QR code pour avis rapide']
     }
   ]
 }
