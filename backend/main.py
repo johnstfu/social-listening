@@ -4,19 +4,23 @@ Social Listening MVP - Backend FastAPI
 API de monitoring des avis restaurants
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 import jwt
 import os
+import secrets
 import requests
 
-from models import Base, engine, SessionLocal, Restaurant, Review, Alert, Recommendation, RecommendationStep, PlatformConnection, User, ConnectedPlatform
+from models import Base, engine, SessionLocal, Restaurant, Review, Recommendation, RecommendationStep, PlatformConnection, User, ConnectedPlatform, Invitation, WeeklyReportLog
 from schemas import (
-    RestaurantCreate, RestaurantResponse, ReviewResponse, AlertCreate, AlertResponse,
+    RegisterRequest, LoginRequest, TokenResponse, UserResponse,
+    InvitationCreate, InvitationResponse,
+    RestaurantCreate, RestaurantResponse, ReviewResponse,
     RecommendationCreate, RecommendationResponse, RecommendationStepResponse,
     PlatformConnectionCreate, PlatformConnectionResponse
 )
@@ -30,29 +34,31 @@ from sync_scheduler import sync_scheduler, start_sync_scheduler, stop_sync_sched
 
 # Configuration
 app = FastAPI(
-    title="Social Listening API",
-    description="API de monitoring des avis restaurants",
-    version="1.0.0"
+    title="Radar API",
+    description="Radar — Monitoring réputation établissements locaux",
+    version="2.0.0"
+)
+
+# CORS — origines autorisées depuis l'env
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Root endpoint
 @app.get("/")
 def root():
     return {
-        "message": "Social Listening API",
-        "version": "1.0.0",
+        "message": "Radar API",
+        "version": "2.0.0",
         "docs": "/docs",
-        "frontend": "http://localhost:3000"
     }
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En production: spécifier les domaines
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Dependencies
 def get_db():
@@ -72,7 +78,9 @@ email_service = EmailService(api_key=os.getenv("SENDGRID_API_KEY"))
 
 # Auth configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET manquant — définissez-le dans les variables d'environnement")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -81,57 +89,23 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/auth/google/callback")
 
+# Bearer security scheme
+bearer_scheme = HTTPBearer()
 
-def create_jwt_token(user_id: int):
-    """Créer un token JWT"""
+
+def create_jwt_token(user_id: int) -> str:
+    """Créer un token JWT signé"""
     expiration = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
     payload = {"user_id": user_id, "exp": expiration}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-# ==================== AUTH ====================
-
-@app.post("/api/auth/register")
-def register(email: str, password: str, db: Session = Depends(get_db)):
-    """Inscription utilisateur"""
-    # Vérifier si l'email existe déjà
-    existing_user = db.query(User).filter(User.email == email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
-
-    # Hasher le mot de passe
-    password_hash = pwd_context.hash(password)
-
-    # Créer l'utilisateur
-    user = User(email=email, password_hash=password_hash)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    # Générer le token JWT
-    token = create_jwt_token(user.id)
-
-    return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "email": user.email}}
-
-
-@app.post("/api/auth/login")
-def login(email: str, password: str, db: Session = Depends(get_db)):
-    """Connexion utilisateur"""
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not pwd_context.verify(password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
-
-    token = create_jwt_token(user.id)
-
-    return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "email": user.email}}
-
-
-@app.get("/api/auth/me")
-def get_current_user(token: str = None, db: Session = Depends(get_db)):
-    """Récupérer l'utilisateur connecté"""
-    if not token:
-        raise HTTPException(status_code=401, detail="Token manquant")
-
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    db: Session = Depends(get_db)
+) -> User:
+    """Dépendance FastAPI — valide le Bearer token et retourne l'utilisateur"""
+    token = credentials.credentials
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("user_id")
@@ -144,9 +118,73 @@ def get_current_user(token: str = None, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+        raise HTTPException(status_code=401, detail="Utilisateur introuvable")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Compte désactivé — contactez SeRious")
+    return user
 
-    return {"id": user.id, "email": user.email}
+
+def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """Dépendance — réservé aux admins SeRious"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+    return current_user
+
+
+# ==================== AUTH ====================
+
+@app.post("/api/auth/register", response_model=TokenResponse)
+def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    """Inscription via invitation SeRious — email/password"""
+    # Vérifier l'invitation
+    invitation = db.query(Invitation).filter(
+        Invitation.token == data.invitation_token,
+        Invitation.used == False
+    ).first()
+    if not invitation:
+        raise HTTPException(status_code=400, detail="Invitation invalide ou déjà utilisée")
+    if invitation.expires_at and invitation.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invitation expirée")
+
+    # Vérifier email unique
+    if db.query(User).filter(User.email == data.email).first():
+        raise HTTPException(status_code=400, detail="Email déjà utilisé")
+
+    user = User(
+        email=data.email,
+        name=data.name,
+        password_hash=pwd_context.hash(data.password),
+        is_active=True,
+    )
+    db.add(user)
+
+    # Marquer l'invitation comme utilisée
+    invitation.used = True
+    invitation.used_at = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+
+    token = create_jwt_token(user.id)
+    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+def login(data: LoginRequest, db: Session = Depends(get_db)):
+    """Connexion email/password"""
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user or not user.password_hash or not pwd_context.verify(data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Compte désactivé — contactez SeRious")
+
+    token = create_jwt_token(user.id)
+    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+def me(current_user: User = Depends(get_current_user)):
+    """Profil de l'utilisateur connecté"""
+    return current_user
 
 
 # ==================== GOOGLE OAUTH ====================
@@ -221,57 +259,134 @@ def google_oauth_callback(code: str, db: Session = Depends(get_db)):
     return {"access_token": jwt_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email}}
 
 
-# ==================== HELPERS ====================
+# ==================== ADMIN — BOOTSTRAP ====================
 
-def get_current_user_id(token: str = None, db: Session = None) -> int:
-    """Extraire l'user_id du token JWT"""
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload.get("user_id")
-    except:
-        return None
+@app.post("/api/admin/bootstrap")
+def bootstrap_admin(
+    email: str,
+    password: str,
+    setup_key: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Créer le premier admin SeRious.
+    Ne fonctionne que si aucun admin n'existe.
+    setup_key = valeur de SETUP_KEY dans le .env (ou 'radar-setup' par défaut).
+    """
+    expected_key = os.getenv("SETUP_KEY", "radar-setup")
+    if setup_key != expected_key:
+        raise HTTPException(status_code=403, detail="setup_key invalide")
+
+    existing_admin = db.query(User).filter(User.is_admin == True).first()
+    if existing_admin:
+        raise HTTPException(status_code=409, detail="Un admin existe déjà")
+
+    pw_hash = pwd_context.hash(password)
+    admin = User(email=email, password_hash=pw_hash, is_admin=True, is_active=True)
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return {"message": f"Admin créé : {admin.email}", "id": admin.id}
+
+
+# ==================== ADMIN — INVITATIONS ====================
+
+@app.post("/api/admin/invitations", response_model=InvitationResponse)
+def create_invitation(
+    data: InvitationCreate,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Créer une invitation pour un nouveau client (admin SeRious uniquement)"""
+    token = secrets.token_urlsafe(32)
+    invitation = Invitation(
+        token=token,
+        email=data.email,
+        created_by=admin.email,
+    )
+    db.add(invitation)
+    db.commit()
+    db.refresh(invitation)
+    return invitation
+
+
+@app.get("/api/admin/invitations", response_model=List[InvitationResponse])
+def list_invitations(
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Lister toutes les invitations (admin SeRious)"""
+    return db.query(Invitation).order_by(Invitation.created_at.desc()).all()
+
+
+@app.get("/api/admin/users", response_model=List[UserResponse])
+def list_users(
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Lister tous les clients (admin SeRious)"""
+    return db.query(User).filter(User.is_admin == False).all()
+
+
+@app.patch("/api/admin/users/{user_id}/deactivate")
+def deactivate_user(
+    user_id: int,
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Désactiver le compte d'un client"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    user.is_active = False
+    db.commit()
+    return {"message": f"Compte {user.email} désactivé"}
 
 
 # ==================== RESTAURANTS ====================
 
 @app.get("/api/restaurants", response_model=List[RestaurantResponse])
-def list_restaurants(token: str = None, db: Session = Depends(get_db)):
-    """Liste les restaurants de l'utilisateur connecté"""
-    user_id = get_current_user_id(token, db)
-    if user_id:
-        restaurants = db.query(Restaurant).filter(Restaurant.user_id == user_id).all()
-    else:
-        # Mode démo: retourner tous les restaurants
-        restaurants = db.query(Restaurant).all()
-    return restaurants
+def list_restaurants(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Liste les établissements de l'utilisateur connecté"""
+    return db.query(Restaurant).filter(Restaurant.user_id == current_user.id).all()
 
 
 @app.get("/api/restaurants/{restaurant_id}", response_model=RestaurantResponse)
-def get_restaurant(restaurant_id: int, token: str = None, db: Session = Depends(get_db)):
-    """Détail d'un restaurant"""
-    user_id = get_current_user_id(token, db)
-    query = db.query(Restaurant).filter(Restaurant.id == restaurant_id)
-    if user_id:
-        query = query.filter(Restaurant.user_id == user_id)
-    restaurant = query.first()
+def get_restaurant(
+    restaurant_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Détail d'un établissement (vérifie l'appartenance)"""
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.id == restaurant_id,
+        Restaurant.user_id == current_user.id
+    ).first()
     if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurant non trouvé")
+        raise HTTPException(status_code=404, detail="Établissement non trouvé")
     return restaurant
 
 
 @app.post("/api/restaurants", response_model=RestaurantResponse)
-def create_restaurant(restaurant: RestaurantCreate, token: str = None, db: Session = Depends(get_db)):
-    """Ajouter un nouveau restaurant à monitorer"""
-    user_id = get_current_user_id(token, db)
-    # Créer le restaurant
+def create_restaurant(
+    restaurant: RestaurantCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Ajouter un établissement à monitorer"""
     db_restaurant = Restaurant(
         name=restaurant.name,
+        category=restaurant.category,
         google_place_id=restaurant.google_place_id,
+        gmb_location_name=restaurant.gmb_location_name,
         address=restaurant.address,
+        phone=restaurant.phone,
+        website=restaurant.website,
         email_alert=restaurant.email_alert,
-        user_id=user_id
+        user_id=current_user.id
     )
     db.add(db_restaurant)
     db.commit()
@@ -300,24 +415,44 @@ def create_restaurant(restaurant: RestaurantCreate, token: str = None, db: Sessi
 # ==================== REVIEWS ====================
 
 @app.get("/api/restaurants/{restaurant_id}/reviews", response_model=List[ReviewResponse])
-def get_reviews(restaurant_id: int, db: Session = Depends(get_db)):
+def get_reviews(
+    restaurant_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Récupérer les avis d'un restaurant"""
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.id == restaurant_id, Restaurant.user_id == current_user.id
+    ).first()
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant non trouvé")
     reviews = db.query(Review).filter(Review.restaurant_id == restaurant_id).order_by(Review.date.desc()).all()
     return reviews
 
 
 @app.get("/api/restaurants/{restaurant_id}/sentiment")
-def get_sentiment_summary(restaurant_id: int, db: Session = Depends(get_db)):
+def get_sentiment_summary(
+    restaurant_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Résumé du sentiment pour un restaurant"""
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.id == restaurant_id, Restaurant.user_id == current_user.id
+    ).first()
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant non trouvé")
+
     reviews = db.query(Review).filter(Review.restaurant_id == restaurant_id).all()
 
     if not reviews:
-        return {"positive": 0, "neutral": 0, "negative": 0, "average_score": 0}
+        return {"positive": 0, "neutral": 0, "negative": 0, "average_score": 0.0, "total_reviews": 0}
 
     positive = sum(1 for r in reviews if r.sentiment == "positive")
     neutral = sum(1 for r in reviews if r.sentiment == "neutral")
     negative = sum(1 for r in reviews if r.sentiment == "negative")
-    avg_score = sum(r.sentiment_score for r in reviews) / len(reviews)
+    scores = [r.sentiment_score for r in reviews if r.sentiment_score is not None]
+    avg_score = sum(scores) / len(scores) if scores else 0.0
 
     return {
         "positive": positive,
@@ -328,29 +463,7 @@ def get_sentiment_summary(restaurant_id: int, db: Session = Depends(get_db)):
     }
 
 
-# ==================== ALERTS ====================
-
-@app.get("/api/alerts", response_model=List[AlertResponse])
-def list_alerts(db: Session = Depends(get_db)):
-    """Liste toutes les alertes configurées"""
-    alerts = db.query(Alert).all()
-    return alerts
-
-
-@app.post("/api/alerts", response_model=AlertResponse)
-def create_alert(alert: AlertCreate, db: Session = Depends(get_db)):
-    """Créer une nouvelle alerte"""
-    db_alert = Alert(
-        restaurant_id=alert.restaurant_id,
-        alert_type=alert.alert_type,
-        threshold=alert.threshold,
-        email=alert.email,
-        is_active=True
-    )
-    db.add(db_alert)
-    db.commit()
-    db.refresh(db_alert)
-    return db_alert
+# ==================== ALERTS (dynamiques depuis avis, pas de table dédiée) ====================
 
 
 @app.get("/api/restaurants/{restaurant_id}/alerts")
@@ -421,9 +534,15 @@ def get_restaurant_alerts(restaurant_id: int, db: Session = Depends(get_db)):
 # ==================== RECOMMENDATIONS ====================
 
 @app.get("/api/restaurants/{restaurant_id}/recommendations", response_model=List[RecommendationResponse])
-def list_recommendations(restaurant_id: int, db: Session = Depends(get_db)):
+def list_recommendations(
+    restaurant_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Liste des recommandations pour un restaurant"""
-    restaurant = db.query(Restaurant).filter(Restaurant.id == restaurant_id).first()
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.id == restaurant_id, Restaurant.user_id == current_user.id
+    ).first()
     if not restaurant:
         raise HTTPException(status_code=404, detail="Restaurant non trouvé")
 

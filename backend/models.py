@@ -1,55 +1,79 @@
 """
-Social Listening MVP - Models SQLAlchemy
-========================================
-Modèles de données pour SQLite
+Radar — Models SQLAlchemy
+=========================
+Multi-tenant — PostgreSQL
 """
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+import os
 
-# Database URL (SQLite pour simplicité)
-SQLALCHEMY_DATABASE_URL = "sqlite:///./social_listening.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./radar_dev.db")
 
-# Engine et Session
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Railway fournit parfois "postgres://" au lieu de "postgresql://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# SQLite needs connect_args for threading
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 
+class Invitation(Base):
+    """Invitation envoyée par SeRious à un nouveau client"""
+    __tablename__ = "invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(64), unique=True, index=True, nullable=False)
+    email = Column(String(255), nullable=True)          # pré-rempli optionnel
+    used = Column(Boolean, default=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)        # None = pas d'expiration
+    created_by = Column(String(255), nullable=True)     # email de l'admin SeRious
+
+
 class User(Base):
-    """Utilisateur de l'application"""
+    """Utilisateur (client final)"""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+    password_hash = Column(String(255), nullable=True)  # Null si Google OAuth uniquement
+    google_id = Column(String(255), unique=True, nullable=True)
+    is_active = Column(Boolean, default=True)           # SeRious peut désactiver
+    is_admin = Column(Boolean, default=False)           # Admin SeRious
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relations
     restaurants = relationship("Restaurant", back_populates="user")
     connected_platforms = relationship("ConnectedPlatform", back_populates="user")
 
 
 class Restaurant(Base):
-    """Restaurant monitoré"""
+    """Établissement monitoré"""
     __tablename__ = "restaurants"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String(255), nullable=False)
-    google_place_id = Column(String(255), unique=True, nullable=True)
+    category = Column(String(100), nullable=True)       # restaurant, boulangerie, salon, ...
+    google_place_id = Column(String(255), nullable=True)
+    gmb_location_name = Column(String(255), nullable=True)  # ex: locations/123456
     address = Column(String(500), nullable=True)
-    email_alert = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    website = Column(String(500), nullable=True)
+    email_alert = Column(String(255), nullable=True)    # pour récap hebdo
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relations
     user = relationship("User", back_populates="restaurants")
     reviews = relationship("Review", back_populates="restaurant", cascade="all, delete-orphan")
-    alerts = relationship("Alert", back_populates="restaurant", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="restaurant", cascade="all, delete-orphan")
     platform_connections = relationship("PlatformConnection", back_populates="restaurant", cascade="all, delete-orphan")
     connected_platforms = relationship("ConnectedPlatform", back_populates="restaurant", cascade="all, delete-orphan")
@@ -61,66 +85,36 @@ class Review(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
-    source = Column(String(50), nullable=False)  # google, tripadvisor, yelp, facebook
-    external_id = Column(String(255), nullable=True)  # ID externe de la plateforme
+    source = Column(String(50), nullable=False)         # google, tripadvisor, yelp, facebook
+    external_id = Column(String(255), nullable=True)    # ID sur la plateforme source
     author = Column(String(255), nullable=True)
-    rating = Column(Integer, nullable=False)  # 1-5
+    rating = Column(Integer, nullable=False)            # 1–5
     text = Column(Text, nullable=True)
     date = Column(DateTime, nullable=True)
-    sentiment = Column(String(20), nullable=True)  # positive, neutral, negative
-    sentiment_score = Column(Float, nullable=True)  # -1 to 1
-    sentiment_details = Column(Text, nullable=True)  # JSON avec détails Claude
+    sentiment = Column(String(20), nullable=True)       # positive, neutral, negative
+    sentiment_score = Column(Float, nullable=True)      # -1.0 à 1.0
+    sentiment_details = Column(Text, nullable=True)     # JSON Claude
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relations
     restaurant = relationship("Restaurant", back_populates="reviews")
 
 
-class Alert(Base):
-    """Configuration d'alerte"""
-    __tablename__ = "alerts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
-    alert_type = Column(String(50), nullable=False)  # low_rating, negative_sentiment, keyword
-    threshold = Column(Float, nullable=True)  # ex: rating < 2
-    email = Column(String(255), nullable=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relations
-    restaurant = relationship("Restaurant", back_populates="alerts")
-
-
-class AlertLog(Base):
-    """Historique des alertes envoyées"""
-    __tablename__ = "alert_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=False)
-    review_id = Column(Integer, ForeignKey("reviews.id"), nullable=True)
-    sent_at = Column(DateTime, default=datetime.utcnow)
-    status = Column(String(20), nullable=False)  # sent, failed
-    error_message = Column(Text, nullable=True)
-
-
 class Recommendation(Base):
-    """Recommandation d'amélioration pour un restaurant"""
+    """Recommandation IA pour un établissement"""
     __tablename__ = "recommendations"
 
     id = Column(Integer, primary_key=True, index=True)
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
-    priority = Column(String(20), nullable=False)  # urgent, high, medium, low
-    category = Column(String(50), nullable=False)  # Service, Menu, Ambiance, etc.
+    priority = Column(String(20), nullable=False)       # urgent, high, medium, low
+    category = Column(String(50), nullable=False)       # Service, Qualité, Ambiance, ...
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    source = Column(String(100), nullable=True)  # Source de la recommandation
-    progress = Column(Integer, default=0)  # Nombre d'étapes complétées
-    total_steps = Column(Integer, default=4)  # Nombre total d'étapes
+    source = Column(String(100), nullable=True)
+    progress = Column(Integer, default=0)
+    total_steps = Column(Integer, default=4)
     is_completed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relations
     restaurant = relationship("Restaurant", back_populates="recommendations")
     steps = relationship("RecommendationStep", back_populates="recommendation", cascade="all, delete-orphan")
 
@@ -134,53 +128,56 @@ class RecommendationStep(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     is_completed = Column(Boolean, default=False)
-    order = Column(Integer, nullable=False)  # Ordre de l'étape
+    order = Column(Integer, nullable=False)
 
-    # Relations
     recommendation = relationship("Recommendation", back_populates="steps")
 
 
 class PlatformConnection(Base):
-    """Connexion à une plateforme d'avis"""
+    """Connexion OAuth à une plateforme d'avis"""
     __tablename__ = "platform_connections"
 
     id = Column(Integer, primary_key=True, index=True)
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
-    platform_name = Column(String(50), nullable=False)  # google, tripadvisor, yelp, facebook
-    api_key = Column(String(500), nullable=True)  # Chiffré en production
-    place_id = Column(String(255), nullable=True)  # ID du lieu sur la plateforme
+    platform_name = Column(String(50), nullable=False)
+    place_id = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     last_sync = Column(DateTime, nullable=True)
     reviews_count = Column(Integer, default=0)
     avg_rating = Column(Float, default=0.0)
 
-    # Relations
     restaurant = relationship("Restaurant", back_populates="platform_connections")
 
 
 class ConnectedPlatform(Base):
-    """Plateforme connectée par l'utilisateur (OAuth ou URL-based)"""
+    """Token OAuth stocké par utilisateur"""
     __tablename__ = "connected_platforms"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=True)
-
-    platform = Column(String(50), nullable=False)  # 'google', 'facebook', 'tripadvisor', 'yelp'
-
-    # OAuth tokens (Google, Facebook)
+    platform = Column(String(50), nullable=False)       # google, facebook, ...
     encrypted_access_token = Column(Text, nullable=True)
     encrypted_refresh_token = Column(Text, nullable=True)
     token_expires_at = Column(DateTime, nullable=True)
-
-    # URL-based (TripAdvisor, Yelp)
     platform_url = Column(Text, nullable=True)
     platform_business_id = Column(String(255), nullable=True)
-
-    status = Column(String(20), default="active")  # 'active', 'expired'
+    status = Column(String(20), default="active")       # active, expired
     last_sync_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relations
     user = relationship("User", back_populates="connected_platforms")
     restaurant = relationship("Restaurant", back_populates="connected_platforms")
+
+
+class WeeklyReportLog(Base):
+    """Log des récaps hebdomadaires envoyés"""
+    __tablename__ = "weekly_report_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(20), nullable=False)         # sent, failed
+    error_message = Column(Text, nullable=True)
+    period_start = Column(DateTime, nullable=True)
+    period_end = Column(DateTime, nullable=True)

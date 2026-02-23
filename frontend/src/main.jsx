@@ -4,22 +4,18 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import './index.css'
 import Auth from './pages/Auth'
-import Connectivity from './pages/Connectivity'
-import Dashboard from './pages/Dashboard'
-import DashboardV2 from './pages/DashboardV2'
-import GoogleCallback from './pages/GoogleCallback'
 import GbpCallback from './pages/GbpCallback'
+import GoogleCallback from './pages/GoogleCallback'
 import Onboarding from './pages/Onboarding'
+import RadarDashboard from './pages/DashboardV2'
+import ReviewsPage from './pages/Reviews'
+import RecommendationsPage from './pages/Recommendations'
 
-// Composant pour protéger les routes
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token')
-  const demo = localStorage.getItem('demo')
-
-  if (!token && !demo) {
+  if (!token) {
     return <Navigate to="/auth" replace />
   }
-
   return children
 }
 
@@ -27,28 +23,29 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* Route publique pour l'authentification */}
+        {/* Pages publiques */}
         <Route path="/auth" element={<Auth />} />
-
-        {/* Callback Google OAuth */}
         <Route path="/auth/google/callback" element={<GoogleCallback />} />
-
-        {/* Callback Google Business Profile OAuth */}
         <Route path="/oauth/gbp/callback" element={<GbpCallback />} />
+        <Route path="/onboarding" element={
+          <ProtectedRoute>
+            <Onboarding />
+          </ProtectedRoute>
+        } />
 
-        {/* Route publique pour l'onboarding */}
-        <Route path="/onboarding" element={<Onboarding />} />
-
-        {/* Routes protégées */}
+        {/* App protégée */}
         <Route path="/" element={
           <ProtectedRoute>
             <Layout />
           </ProtectedRoute>
         }>
-          <Route index element={<Dashboard />} />
-          <Route path="connectivity" element={<Connectivity />} />
-          <Route path="dashboard-v2" element={<DashboardV2 />} />
+          <Route index element={<RadarDashboard />} />
+          <Route path="reviews" element={<ReviewsPage />} />
+          <Route path="recommendations" element={<RecommendationsPage />} />
         </Route>
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
